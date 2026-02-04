@@ -1,6 +1,6 @@
 {
-  "name": "@pchuri/jira-cli",
-  "version": "2.3.1",
+  "name": "@acring/jira-cli",
+  "version": "1.0.0",
   "description": "A modern, extensible command line interface for JIRA with Factory pattern and Commander.js",
   "main": "bin/index.js",
   "bin": {
@@ -20,7 +20,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pchuri/jira-cli.git"
+    "url": "git+https://github.com/acring/jira-cli.git"
   },
   "keywords": [
     "jira",
@@ -35,16 +35,16 @@
     "project-management"
   ],
   "author": {
-    "name": "pchuri",
+    "name": "acring",
     "email": "your.email@example.com",
-    "url": "https://github.com/pchuri"
+    "url": "https://github.com/acring"
   },
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/pchuri/jira-cli/issues"
+    "url": "https://github.com/acring/jira-cli/issues"
   },
-  "homepage": "https://github.com/pchuri/jira-cli#readme",
+  "homepage": "https://github.com/acring/jira-cli#readme",
   "publishConfig": {
     "access": "public"
   },

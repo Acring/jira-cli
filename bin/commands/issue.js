@@ -133,11 +133,29 @@ function createIssueCommand(factory) {
     .action(async (key, options) => {
       const io = factory.getIOStreams();
       const client = await factory.getJiraClient();
-      
+
       try {
         await deleteIssue(client, io, key, options);
       } catch (err) {
         io.error(`Failed to delete issue: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
+  command
+    .command('field <key> <fieldId>')
+    .description('view a specific field value of an issue\n\n' +
+      'Examples:\n' +
+      '  $ jira issue field PROJ-123 customfield_11103    # View custom field\n' +
+      '  $ jira issue field PROJ-123 description         # View description')
+    .action(async (key, fieldId) => {
+      const io = factory.getIOStreams();
+      const client = await factory.getJiraClient();
+
+      try {
+        await viewIssueField(client, io, key, fieldId);
+      } catch (err) {
+        io.error(`Failed to get field: ${err.message}`);
         process.exit(1);
       }
     });
@@ -285,6 +303,20 @@ async function getIssue(client, io, issueKey, options = {}) {
 
   try {
     const issue = await client.getIssue(issueKey);
+
+    // Fetch field metadata to get friendly names
+    let fieldNameMap = {};
+    try {
+      const fields = await client.getFields();
+      fields.forEach(field => {
+        if (field.id && field.name) {
+          fieldNameMap[field.id] = field.name;
+        }
+      });
+    } catch (fieldErr) {
+      // Silently ignore if field metadata fetch fails (may require admin permissions)
+    }
+
     spinner.stop();
 
     if (options.output) {
@@ -297,7 +329,7 @@ async function getIssue(client, io, issueKey, options = {}) {
       const markdown = formatIssueAsMarkdown(issue);
       io.out('\n' + markdown);
     } else {
-      displayIssueDetails(issue);
+      displayIssueDetails(issue, fieldNameMap);
     }
 
   } catch (err) {
@@ -461,6 +493,64 @@ async function deleteIssue(client, io, issueKey, options = {}) {
   deleteSpinner.stop();
 
   io.success(`Issue ${issueKey} deleted successfully`);
+}
+
+async function viewIssueField(client, io, issueKey, fieldId) {
+  const spinner = io.spinner(`Fetching issue ${issueKey}...`);
+
+  try {
+    const issue = await client.getIssue(issueKey);
+    spinner.stop();
+
+    const fieldValue = issue.fields[fieldId];
+
+    if (fieldValue === undefined) {
+      throw new Error(`Field "${fieldId}" not found in issue ${issueKey}`);
+    }
+
+    io.out(chalk.bold(`\n${issueKey} - ${fieldId}:`));
+    io.out(chalk.gray('─'.repeat(60)));
+
+    if (fieldValue === null) {
+      io.out(chalk.gray('(empty)'));
+    } else if (typeof fieldValue === 'string') {
+      io.out(fieldValue);
+    } else if (typeof fieldValue === 'number') {
+      io.out(String(fieldValue));
+    } else if (Array.isArray(fieldValue)) {
+      fieldValue.forEach((item, index) => {
+        if (typeof item === 'string') {
+          io.out(`  ${index + 1}. ${item}`);
+        } else if (item && item.displayName) {
+          io.out(`  ${index + 1}. ${item.displayName}`);
+        } else if (item && item.name) {
+          io.out(`  ${index + 1}. ${item.name}`);
+        } else if (item && item.value) {
+          io.out(`  ${index + 1}. ${item.value}`);
+        } else {
+          io.out(`  ${index + 1}. ${JSON.stringify(item, null, 2)}`);
+        }
+      });
+    } else if (typeof fieldValue === 'object') {
+      if (fieldValue.displayName) {
+        io.out(fieldValue.displayName);
+      } else if (fieldValue.name) {
+        io.out(fieldValue.name);
+      } else if (fieldValue.value) {
+        io.out(fieldValue.value);
+      } else {
+        io.out(JSON.stringify(fieldValue, null, 2));
+      }
+    } else {
+      io.out(String(fieldValue));
+    }
+
+    io.out('');
+
+  } catch (err) {
+    spinner.stop();
+    throw err;
+  }
 }
 
 async function addComment(client, io, issueKey, text, options = {}) {

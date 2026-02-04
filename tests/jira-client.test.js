@@ -87,10 +87,27 @@ describe('JiraClient', () => {
   });
 
   describe('API methods', () => {
-    // Mock axios client
+    // Mock axios client - need to mock before interceptors can interfere
     beforeEach(() => {
-      client.clientV3.request = jest.fn();
-      client.clientV3.get = jest.fn();
+      // Create fresh mock functions that bypass interceptors
+      const mockRequest = jest.fn();
+      const mockGet = jest.fn();
+
+      // Replace the entire client methods to avoid interceptor interference
+      client.clientV3 = {
+        request: mockRequest,
+        get: mockGet,
+        defaults: client.clientV3.defaults
+      };
+      client.clientV2 = {
+        request: mockRequest,
+        get: mockGet,
+        defaults: client.clientV2.defaults
+      };
+
+      // Force API version to 3 to ensure consistent test behavior
+      client.apiVersion = 3;
+      client.apiVersionMode = 3;
     });
 
     test('getIssue should make correct API call', async () => {
@@ -210,10 +227,21 @@ describe('JiraClient', () => {
 
   // Error handling tests
   describe('error handling', () => {
+    beforeEach(() => {
+      // Force API version to 3 for consistent behavior
+      client.apiVersion = 3;
+      client.apiVersionMode = 3;
+    });
+
     test('should handle axios errors', async () => {
       // Test that errors are properly propagated
       const error = new Error('Network error');
-      client.clientV3.request = jest.fn().mockRejectedValue(error);
+      // Mock the entire clientV3 to bypass interceptors
+      client.clientV3 = {
+        request: jest.fn().mockRejectedValue(error),
+        get: jest.fn().mockRejectedValue(error),
+        defaults: client.clientV3.defaults
+      };
 
       await expect(client.getIssue('TEST-1')).rejects.toThrow('Network error');
     });
