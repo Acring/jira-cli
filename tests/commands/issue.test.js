@@ -112,6 +112,95 @@ describe('IssueCommand', () => {
     });
   });
 
+  describe('attachment subcommand', () => {
+    let attachmentCommand;
+
+    beforeEach(() => {
+      attachmentCommand = issueCommand.commands.find(cmd => cmd.name() === 'attachment');
+    });
+
+    it('should exist with correct aliases', () => {
+      expect(attachmentCommand).toBeDefined();
+      expect(attachmentCommand.aliases()).toContain('attach');
+      expect(attachmentCommand.aliases()).toContain('a');
+    });
+
+    it('should have list subcommand', () => {
+      const listCommand = attachmentCommand.commands.find(cmd => cmd.name() === 'list');
+      expect(listCommand).toBeDefined();
+      expect(listCommand.description()).toContain('list attachments');
+    });
+
+    it('should have download subcommand', () => {
+      const downloadCommand = attachmentCommand.commands.find(cmd => cmd.name() === 'download');
+      expect(downloadCommand).toBeDefined();
+      expect(downloadCommand.description()).toContain('download attachments');
+    });
+
+    it('should have upload subcommand', () => {
+      const uploadCommand = attachmentCommand.commands.find(cmd => cmd.name() === 'upload');
+      expect(uploadCommand).toBeDefined();
+      expect(uploadCommand.description()).toContain('upload attachments');
+    });
+
+    it('should have delete subcommand', () => {
+      const deleteCommand = attachmentCommand.commands.find(cmd => cmd.name() === 'delete');
+      expect(deleteCommand).toBeDefined();
+      expect(deleteCommand.description()).toContain('delete an attachment');
+    });
+
+    describe('download subcommand options', () => {
+      let downloadCommand;
+
+      beforeEach(() => {
+        downloadCommand = attachmentCommand.commands.find(cmd => cmd.name() === 'download');
+      });
+
+      it('should have output option with default value', () => {
+        const outputOption = downloadCommand.options.find(opt => opt.long === '--output');
+        expect(outputOption).toBeDefined();
+        expect(outputOption.defaultValue).toBe('.');
+      });
+
+      it('should have name pattern option', () => {
+        const nameOption = downloadCommand.options.find(opt => opt.long === '--name');
+        expect(nameOption).toBeDefined();
+      });
+
+      it('should have overwrite option', () => {
+        const overwriteOption = downloadCommand.options.find(opt => opt.long === '--overwrite');
+        expect(overwriteOption).toBeDefined();
+      });
+    });
+
+    describe('list subcommand options', () => {
+      let listCommand;
+
+      beforeEach(() => {
+        listCommand = attachmentCommand.commands.find(cmd => cmd.name() === 'list');
+      });
+
+      it('should have format option with default value', () => {
+        const formatOption = listCommand.options.find(opt => opt.long === '--format');
+        expect(formatOption).toBeDefined();
+        expect(formatOption.defaultValue).toBe('table');
+      });
+    });
+
+    describe('delete subcommand options', () => {
+      let deleteCommand;
+
+      beforeEach(() => {
+        deleteCommand = attachmentCommand.commands.find(cmd => cmd.name() === 'delete');
+      });
+
+      it('should have force option', () => {
+        const forceOption = deleteCommand.options.find(opt => opt.long === '--force');
+        expect(forceOption).toBeDefined();
+      });
+    });
+  });
+
   describe('list subcommand options', () => {
     let listCommand;
 

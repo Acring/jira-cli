@@ -223,6 +223,25 @@ describe('JiraClient', () => {
       expect(client.clientV3.request).toHaveBeenCalledWith({ method: 'delete', url: '/comment/10000' });
       expect(result).toBe(true);
     });
+
+    test('getAttachment should make correct API call', async () => {
+      const mockAttachment = { id: '10001', filename: 'test.png', size: 1024 };
+      client.clientV3.request.mockResolvedValue({ data: mockAttachment });
+
+      const result = await client.getAttachment('10001');
+
+      expect(client.clientV3.request).toHaveBeenCalledWith({ method: 'get', url: '/attachment/10001' });
+      expect(result).toEqual(mockAttachment);
+    });
+
+    test('deleteAttachment should make correct API call', async () => {
+      client.clientV3.request.mockResolvedValue({});
+
+      const result = await client.deleteAttachment('10001');
+
+      expect(client.clientV3.request).toHaveBeenCalledWith({ method: 'delete', url: '/attachment/10001' });
+      expect(result).toBe(true);
+    });
   });
 
   // Error handling tests
