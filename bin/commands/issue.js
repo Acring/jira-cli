@@ -163,7 +163,12 @@ function createIssueCommand(factory) {
   // Comment subcommand
   const commentCommand = command
     .command('comment')
-    .description('Manage issue comments')
+    .description('Manage issue comments\n\n' +
+      'Examples:\n' +
+      '  $ jira issue comment list PROJ-123              # List comments\n' +
+      '  $ jira issue comment add PROJ-123 "Comment"     # Add comment\n' +
+      '  $ jira issue comment edit 12345 "Updated"       # Edit comment\n' +
+      '  $ jira issue comment delete 12345 --force       # Delete comment')
     .alias('c');
 
   commentCommand
@@ -246,7 +251,12 @@ function createIssueCommand(factory) {
   // Attachment subcommand
   const attachmentCommand = command
     .command('attachment')
-    .description('Manage issue attachments')
+    .description('Manage issue attachments\n\n' +
+      'Examples:\n' +
+      '  $ jira issue attachment list PROJ-123              # List attachments\n' +
+      '  $ jira issue attachment upload PROJ-123 ./file.png # Upload file\n' +
+      '  $ jira issue attachment download PROJ-123          # Download all\n' +
+      '  $ jira issue attachment delete 12345 --force       # Delete attachment')
     .alias('attach')
     .alias('a');
 
