@@ -1,11 +1,15 @@
 # JIRA CLI
 
+English | [中文](README.zh.md)
+
 A modern, extensible command-line interface for Atlassian JIRA built with Factory pattern and Commander.js. Manage your issues, projects, and sprints directly from the terminal with a beautiful, user-friendly interface.
 
 ## ✨ Features
 
 - 📋 **Issue Management**: Create, read, update, and delete JIRA issues with full CRUD operations
 - 💬 **Comment Management**: Add, list, edit, and delete comments on issues with file support
+- 📎 **Attachment Management**: Upload, download, list, and delete file attachments
+- 🔧 **Custom Fields Support**: View any custom field value with friendly field names
 - 📝 **Markdown Support**: Export issues to markdown files and create/update issues from markdown
 - 📊 **Project Information**: View project details, statistics, and team insights
 - 🏃 **Sprint Management**: Monitor sprint progress, burndown charts, and team velocity
@@ -271,6 +275,55 @@ jira issue c add PROJ-123 "Quick comment"
 jira issue c list PROJ-123
 ```
 
+### Manage Attachments
+
+```bash
+# List all attachments on an issue
+jira issue attachment list PROJ-123
+
+# List attachments in JSON format
+jira issue attachment list PROJ-123 --format json
+
+# Download all attachments from an issue
+jira issue attachment download PROJ-123
+
+# Download to a specific directory
+jira issue attachment download PROJ-123 --output ./downloads
+
+# Download a specific attachment by ID
+jira issue attachment download PROJ-123 12345
+
+# Download attachments matching a pattern
+jira issue attachment download PROJ-123 --name "*.png"
+
+# Upload a file to an issue
+jira issue attachment upload PROJ-123 ./screenshot.png
+
+# Upload multiple files
+jira issue attachment upload PROJ-123 ./doc1.pdf ./doc2.pdf ./image.png
+
+# Delete an attachment (requires --force)
+jira issue attachment delete 12345 --force
+
+# Using command alias
+jira issue a list PROJ-123
+jira issue attach upload PROJ-123 ./file.pdf
+```
+
+### View Custom Fields
+
+```bash
+# View a specific custom field value
+jira issue field PROJ-123 customfield_11103
+
+# View standard fields
+jira issue field PROJ-123 description
+jira issue field PROJ-123 priority
+
+# When viewing an issue, custom fields are displayed with friendly names
+jira issue view PROJ-123
+```
+
 ### Project Management
 
 ```bash
@@ -313,6 +366,11 @@ jira sprint list --board 123 --state active
 | `issue comment list <key>` | List comments on issue | `--format <table\|json>` (default: table) |
 | `issue comment edit <id> [text]` | Edit existing comment | `[text]` or `--file <path>` |
 | `issue comment delete <id>` | Delete comment | **Required:** `--force` |
+| `issue field <key> <fieldId>` | View specific field value | - |
+| `issue attachment list <key>` | List attachments (alias: a, attach) | `--format <table\|json>` |
+| `issue attachment download <key> [id]` | Download attachments | `--output <dir>`, `--name <pattern>`, `--overwrite` |
+| `issue attachment upload <key> <files...>` | Upload files | Multiple files supported |
+| `issue attachment delete <id>` | Delete attachment | **Required:** `--force` |
 | `project list` | List all projects | `--type <type>`, `--category <category>` |
 | `project view <key>` | View project details | - |
 | `project components <key>` | List project components | - |
@@ -381,6 +439,18 @@ jira issue comment edit 12345 "Updated comment"
 
 # Delete a comment
 jira issue comment delete 12345 --force
+
+# List attachments
+jira issue attachment list PROJ-123
+
+# Upload an attachment
+jira issue attachment upload PROJ-123 ./screenshot.png
+
+# Download all attachments
+jira issue attachment download PROJ-123 --output ./downloads
+
+# View a custom field
+jira issue field PROJ-123 customfield_11103
 
 # List all projects
 jira project list
@@ -546,12 +616,12 @@ This project is licensed under the ISC License - see the [LICENSE](https://githu
 - [x] Analytics and reporting
 - [x] Export issues to markdown format
 - [x] Create/update issues from markdown files
+- [x] Issue attachments management
+- [x] Custom fields support
 - [ ] Issue templates
 - [ ] Bulk operations
 - [ ] Integration with other Atlassian tools
-- [ ] Issue attachments management
 - [ ] Workflows and transitions
-- [ ] Custom fields support
 - [ ] Time tracking
 
 ## Support & Feedback
