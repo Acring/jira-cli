@@ -5,6 +5,7 @@
  * Inspired by gh CLI's structure and patterns
  */
 
+console.log('DEV MODE');
 const pkg = require('../package.json');
 const Factory = require('../lib/factory');
 const { createRootCommand } = require('./root');

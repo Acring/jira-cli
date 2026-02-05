@@ -243,6 +243,91 @@ function createIssueCommand(factory) {
       }
     });
 
+  // Attachment subcommand
+  const attachmentCommand = command
+    .command('attachment')
+    .description('Manage issue attachments')
+    .alias('attach')
+    .alias('a');
+
+  attachmentCommand
+    .command('list <key>')
+    .description('list attachments on an issue\n\n' +
+      'Examples:\n' +
+      '  $ jira issue attachment list PROJ-123\n' +
+      '  $ jira issue attachment list PROJ-123 --format json')
+    .option('--format <format>', 'output format (table, json)', 'table')
+    .action(async (key, options) => {
+      const io = factory.getIOStreams();
+      const client = await factory.getJiraClient();
+
+      try {
+        await listAttachments(client, io, key, options);
+      } catch (err) {
+        io.error(`Failed to list attachments: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
+  attachmentCommand
+    .command('download <key> [attachmentId]')
+    .description('download attachments from an issue\n\n' +
+      'Examples:\n' +
+      '  $ jira issue attachment download PROJ-123\n' +
+      '  $ jira issue attachment download PROJ-123 12345\n' +
+      '  $ jira issue attachment download PROJ-123 --output ./downloads\n' +
+      '  $ jira issue attachment download PROJ-123 --name "*.png"')
+    .option('--output <path>', 'output directory', '.')
+    .option('--name <pattern>', 'filter by filename pattern (glob)')
+    .option('--overwrite', 'overwrite existing files')
+    .action(async (key, attachmentId, options) => {
+      const io = factory.getIOStreams();
+      const client = await factory.getJiraClient();
+
+      try {
+        await downloadAttachments(client, io, key, attachmentId, options);
+      } catch (err) {
+        io.error(`Failed to download attachments: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
+  attachmentCommand
+    .command('upload <key> <files...>')
+    .description('upload attachments to an issue\n\n' +
+      'Examples:\n' +
+      '  $ jira issue attachment upload PROJ-123 ./screenshot.png\n' +
+      '  $ jira issue attachment upload PROJ-123 ./doc1.pdf ./doc2.pdf')
+    .action(async (key, files) => {
+      const io = factory.getIOStreams();
+      const client = await factory.getJiraClient();
+
+      try {
+        await uploadAttachments(client, io, key, files);
+      } catch (err) {
+        io.error(`Failed to upload attachments: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
+  attachmentCommand
+    .command('delete <attachmentId>')
+    .description('delete an attachment\n\n' +
+      'Examples:\n' +
+      '  $ jira issue attachment delete 12345 --force')
+    .option('-f, --force', 'force delete without confirmation')
+    .action(async (attachmentId, options) => {
+      const io = factory.getIOStreams();
+      const client = await factory.getJiraClient();
+
+      try {
+        await deleteAttachment(client, io, attachmentId, options);
+      } catch (err) {
+        io.error(`Failed to delete attachment: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
   return command;
 }
 
@@ -664,6 +749,175 @@ async function deleteComment(client, io, commentId, options = {}) {
   spinner.stop();
 
   io.success(`Comment ${commentId} deleted successfully`);
+}
+
+// Attachment functions
+function createAttachmentsTable(attachments) {
+  const Table = require('cli-table3');
+  const table = new Table({
+    head: [
+      chalk.bold('ID'),
+      chalk.bold('Filename'),
+      chalk.bold('Size'),
+      chalk.bold('Created'),
+      chalk.bold('Author')
+    ],
+    colWidths: [12, 40, 12, 20, 20]
+  });
+
+  attachments.forEach(att => {
+    const size = formatFileSize(att.size);
+    const created = att.created ? new Date(att.created).toLocaleString() : 'N/A';
+    const author = att.author?.displayName || att.author?.name || 'Unknown';
+
+    table.push([
+      chalk.cyan(att.id),
+      att.filename,
+      size,
+      created,
+      author
+    ]);
+  });
+
+  return table;
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+function matchesPattern(filename, pattern) {
+  if (!pattern) return true;
+  const regex = new RegExp(
+    '^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$',
+    'i'
+  );
+  return regex.test(filename);
+}
+
+async function listAttachments(client, io, issueKey, options = {}) {
+  const spinner = io.spinner(`Fetching attachments for ${issueKey}...`);
+
+  try {
+    const issue = await client.getIssue(issueKey);
+    spinner.stop();
+
+    const attachments = issue.fields.attachment || [];
+
+    if (attachments.length === 0) {
+      io.info(`No attachments found for ${issueKey}`);
+      return;
+    }
+
+    io.out(chalk.bold(`\nAttachments for ${issueKey} (${attachments.length} total):\n`));
+
+    if (options.format === 'json') {
+      io.out(JSON.stringify(attachments, null, 2));
+    } else {
+      const table = createAttachmentsTable(attachments);
+      io.out(table.toString());
+    }
+
+  } catch (err) {
+    spinner.stop();
+    throw err;
+  }
+}
+
+async function downloadAttachments(client, io, issueKey, attachmentId, options = {}) {
+  const outputDir = path.resolve(options.output || '.');
+
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  const spinner = io.spinner(`Fetching issue ${issueKey}...`);
+  const issue = await client.getIssue(issueKey);
+  spinner.stop();
+
+  let attachments = issue.fields.attachment || [];
+
+  if (attachments.length === 0) {
+    io.info(`No attachments found for ${issueKey}`);
+    return;
+  }
+
+  if (attachmentId) {
+    attachments = attachments.filter(att => att.id === attachmentId);
+    if (attachments.length === 0) {
+      throw new Error(`Attachment ${attachmentId} not found in ${issueKey}`);
+    }
+  }
+
+  if (options.name) {
+    attachments = attachments.filter(att => matchesPattern(att.filename, options.name));
+    if (attachments.length === 0) {
+      throw new Error(`No attachments matching pattern "${options.name}"`);
+    }
+  }
+
+  io.out(chalk.bold(`\nDownloading ${attachments.length} attachment(s) to ${outputDir}:\n`));
+
+  for (const att of attachments) {
+    const dlSpinner = io.spinner(`Downloading ${att.filename}...`);
+    try {
+      const savedPath = await client.downloadAttachment(att, outputDir, {
+        overwrite: options.overwrite
+      });
+      dlSpinner.stop();
+      io.success(`Downloaded: ${savedPath}`);
+    } catch (err) {
+      dlSpinner.stop();
+      io.error(`Failed to download ${att.filename}: ${err.message}`);
+    }
+  }
+}
+
+async function uploadAttachments(client, io, issueKey, files) {
+  if (!files || files.length === 0) {
+    throw new Error(
+      'At least one file is required.\n\n' +
+      'Usage: jira issue attachment upload <KEY> <file...>\n\n' +
+      'Example:\n' +
+      '  jira issue attachment upload PROJ-123 ./screenshot.png'
+    );
+  }
+
+  io.out(chalk.bold(`\nUploading ${files.length} file(s) to ${issueKey}:\n`));
+
+  for (const file of files) {
+    const spinner = io.spinner(`Uploading ${path.basename(file)}...`);
+    try {
+      const result = await client.uploadAttachment(issueKey, file);
+      spinner.stop();
+      const uploaded = result[0];
+      io.success(`Uploaded: ${uploaded.filename} (ID: ${uploaded.id})`);
+    } catch (err) {
+      spinner.stop();
+      io.error(`Failed to upload ${file}: ${err.message}`);
+    }
+  }
+}
+
+async function deleteAttachment(client, io, attachmentId, options = {}) {
+  io.out(chalk.bold.red('\nWARNING: You are about to delete this attachment:'));
+  io.out(`  Attachment ID: ${chalk.cyan(attachmentId)}\n`);
+
+  if (!options.force) {
+    throw new Error(
+      'Deletion requires --force flag to confirm.\n' +
+      `Use: jira issue attachment delete ${attachmentId} --force`
+    );
+  }
+
+  const spinner = io.spinner('Deleting attachment...');
+  await client.deleteAttachment(attachmentId);
+  spinner.stop();
+
+  io.success(`Attachment ${attachmentId} deleted successfully`);
 }
 
 module.exports = createIssueCommand;
