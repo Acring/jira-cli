@@ -242,6 +242,54 @@ describe('JiraClient', () => {
       expect(client.clientV3.request).toHaveBeenCalledWith({ method: 'delete', url: '/attachment/10001' });
       expect(result).toBe(true);
     });
+
+    test('getTransitions should make correct API call', async () => {
+      const mockTransitions = {
+        transitions: [
+          { id: '31', name: 'Done', to: { name: 'Done' } }
+        ]
+      };
+      client.clientV3.request.mockResolvedValue({ data: mockTransitions });
+
+      const result = await client.getTransitions('TEST-1');
+
+      expect(client.clientV3.request).toHaveBeenCalledWith({
+        method: 'get',
+        url: '/issue/TEST-1/transitions',
+        params: { expand: 'transitions.fields' }
+      });
+      expect(result).toEqual(mockTransitions);
+    });
+
+    test('doTransition should make correct API call without fields', async () => {
+      client.clientV3.request.mockResolvedValue({ data: '' });
+
+      const result = await client.doTransition('TEST-1', '31');
+
+      expect(client.clientV3.request).toHaveBeenCalledWith({
+        method: 'post',
+        url: '/issue/TEST-1/transitions',
+        data: { transition: { id: '31' } }
+      });
+      expect(result).toBe('');
+    });
+
+    test('doTransition should make correct API call with fields', async () => {
+      client.clientV3.request.mockResolvedValue({ data: '' });
+
+      const fields = { resolution: { name: 'Done' } };
+      const result = await client.doTransition('TEST-1', '31', fields);
+
+      expect(client.clientV3.request).toHaveBeenCalledWith({
+        method: 'post',
+        url: '/issue/TEST-1/transitions',
+        data: {
+          transition: { id: '31' },
+          fields: { resolution: { name: 'Done' } }
+        }
+      });
+      expect(result).toBe('');
+    });
   });
 
   // Error handling tests

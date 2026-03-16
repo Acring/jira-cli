@@ -160,6 +160,46 @@ function createIssueCommand(factory) {
       }
     });
 
+  command
+    .command('transitions <key>')
+    .description('list available transitions for an issue\n\n' +
+      'Examples:\n' +
+      '  $ jira issue transitions PROJ-123')
+    .action(async (key) => {
+      const io = factory.getIOStreams();
+      const client = await factory.getJiraClient();
+
+      try {
+        await listTransitions(client, io, key);
+      } catch (err) {
+        io.error(`Failed to get transitions: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
+  command
+    .command('transition <key> <transitionId>')
+    .description('transition an issue to a new status\n\n' +
+      'Examples:\n' +
+      '  $ jira issue transition PROJ-123 31\n' +
+      '  $ jira issue transition PROJ-123 31 --field resolution=Done\n' +
+      '  $ jira issue transition PROJ-123 31 --field-json \'{"resolution":{"name":"Done"}}\'\n' +
+      '  $ jira issue transition PROJ-123 31 --fields-file ./fields.json')
+    .option('--field <value...>', 'field values in fieldId=value format (repeatable)')
+    .option('--field-json <json>', 'fields as a JSON string')
+    .option('--fields-file <path>', 'read fields from a JSON file')
+    .action(async (key, transitionId, options) => {
+      const io = factory.getIOStreams();
+      const client = await factory.getJiraClient();
+
+      try {
+        await doTransition(client, io, key, transitionId, options);
+      } catch (err) {
+        io.error(`Failed to transition issue: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
   // Comment subcommand
   const commentCommand = command
     .command('comment')
@@ -928,6 +968,111 @@ async function deleteAttachment(client, io, attachmentId, options = {}) {
   spinner.stop();
 
   io.success(`Attachment ${attachmentId} deleted successfully`);
+}
+
+async function listTransitions(client, io, issueKey) {
+  const spinner = io.spinner(`Fetching transitions for ${issueKey}...`);
+
+  try {
+    const data = await client.getTransitions(issueKey);
+    spinner.stop();
+
+    const transitions = data.transitions || [];
+
+    if (transitions.length === 0) {
+      io.info(`No available transitions for ${issueKey}`);
+      return;
+    }
+
+    io.out(chalk.bold(`\nAvailable transitions for ${issueKey}:`));
+    io.out(chalk.gray('─'.repeat(60)));
+
+    for (const t of transitions) {
+      const targetName = t.to?.name || 'Unknown';
+      io.out(`  ${chalk.cyan(`[${t.id}]`)} ${t.name} → ${chalk.green(targetName)}`);
+
+      if (t.fields && Object.keys(t.fields).length > 0) {
+        for (const [fieldId, field] of Object.entries(t.fields)) {
+          if (!field.required) continue;
+          let line = `       ${field.name} (${fieldId}): ${field.schema?.type || 'unknown'}`;
+          if (field.allowedValues && field.allowedValues.length > 0) {
+            const values = field.allowedValues.map(v => v.name || v.value || v.id).join(', ');
+            line += ` [${values}]`;
+          }
+          io.out(line);
+        }
+      }
+    }
+
+    io.out('');
+    io.info('Note: API reported required fields may be incomplete. Check your JIRA workflow configuration for the full list.');
+
+  } catch (err) {
+    spinner.stop();
+    throw err;
+  }
+}
+
+async function doTransition(client, io, issueKey, transitionId, options = {}) {
+  let fields = {};
+
+  if (options.fieldsFile) {
+    const filePath = path.resolve(options.fieldsFile);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Fields file not found: ${filePath}`);
+    }
+    const content = fs.readFileSync(filePath, 'utf8');
+    try {
+      fields = JSON.parse(content);
+    } catch (e) {
+      throw new Error(`Invalid JSON in fields file: ${e.message}`);
+    }
+  }
+
+  if (options.fieldJson) {
+    try {
+      const jsonFields = JSON.parse(options.fieldJson);
+      fields = { ...fields, ...jsonFields };
+    } catch (e) {
+      throw new Error(`Invalid JSON in --field-json: ${e.message}`);
+    }
+  }
+
+  if (options.field) {
+    for (const entry of options.field) {
+      const eqIndex = entry.indexOf('=');
+      if (eqIndex === -1) {
+        throw new Error(`Invalid --field format: "${entry}". Expected fieldId=value`);
+      }
+      const fieldId = entry.substring(0, eqIndex);
+      const value = entry.substring(eqIndex + 1);
+      fields[fieldId] = value;
+    }
+  }
+
+  const spinner = io.spinner(`Transitioning ${issueKey}...`);
+
+  try {
+    // Fetch transitions first to find the target status name
+    const transData = await client.getTransitions(issueKey);
+    const transition = (transData.transitions || []).find(t => String(t.id) === String(transitionId));
+
+    await client.doTransition(issueKey, transitionId, fields);
+    spinner.stop();
+
+    const targetStatus = transition?.to?.name || 'Unknown';
+    io.success(`Transition completed: ${issueKey} → ${targetStatus}`);
+
+  } catch (err) {
+    spinner.stop();
+    if (err.data && err.data.errors) {
+      const errorDetails = Object.entries(err.data.errors)
+        .map(([field, msg]) => `  ${field}: ${msg}`)
+        .join('\n');
+      throw new Error(`Transition failed with validation errors:\n${errorDetails}`);
+    }
+    throw err;
+  }
 }
 
 module.exports = createIssueCommand;
