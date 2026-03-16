@@ -164,13 +164,17 @@ function createIssueCommand(factory) {
     .command('transitions <key>')
     .description('list available transitions for an issue\n\n' +
       'Examples:\n' +
-      '  $ jira issue transitions PROJ-123')
-    .action(async (key) => {
+      '  $ jira issue transitions PROJ-123\n' +
+      '  $ jira issue transitions PROJ-123 --verbose    # Show all allowed values\n' +
+      '  $ jira issue transitions PROJ-123 --filter-values versions=v3  # Filter allowed values for a field')
+    .option('--verbose', 'show all allowed values for fields (default: max 5)')
+    .option('--filter-values <fieldId=keyword>', 'filter allowed values for a specific field (case-insensitive)')
+    .action(async (key, options) => {
       const io = factory.getIOStreams();
       const client = await factory.getJiraClient();
 
       try {
-        await listTransitions(client, io, key);
+        await listTransitions(client, io, key, options);
       } catch (err) {
         io.error(`Failed to get transitions: ${err.message}`);
         process.exit(1);
@@ -970,7 +974,7 @@ async function deleteAttachment(client, io, attachmentId, options = {}) {
   io.success(`Attachment ${attachmentId} deleted successfully`);
 }
 
-async function listTransitions(client, io, issueKey) {
+async function listTransitions(client, io, issueKey, options = {}) {
   const spinner = io.spinner(`Fetching transitions for ${issueKey}...`);
 
   try {
@@ -984,6 +988,17 @@ async function listTransitions(client, io, issueKey) {
       return;
     }
 
+    let filterFieldId = null;
+    let filterKeyword = '';
+    if (options.filterValues) {
+      const eqIndex = options.filterValues.indexOf('=');
+      if (eqIndex === -1) {
+        throw new Error('Invalid --filter-values format. Expected fieldId=keyword (e.g., versions=v3)');
+      }
+      filterFieldId = options.filterValues.substring(0, eqIndex);
+      filterKeyword = options.filterValues.substring(eqIndex + 1).toLowerCase();
+    }
+
     io.out(chalk.bold(`\nAvailable transitions for ${issueKey}:`));
     io.out(chalk.gray('─'.repeat(60)));
 
@@ -993,11 +1008,25 @@ async function listTransitions(client, io, issueKey) {
 
       if (t.fields && Object.keys(t.fields).length > 0) {
         for (const [fieldId, field] of Object.entries(t.fields)) {
-          if (!field.required) continue;
-          let line = `       ${field.name} (${fieldId}): ${field.schema?.type || 'unknown'}`;
+          const reqTag = field.required ? chalk.red('*') : ' ';
+          let line = `     ${reqTag} ${field.name} (${fieldId}): ${field.schema?.type || 'unknown'}`;
           if (field.allowedValues && field.allowedValues.length > 0) {
-            const values = field.allowedValues.map(v => v.name || v.value || v.id).join(', ');
-            line += ` [${values}]`;
+            let filtered = field.allowedValues;
+            let isFiltered = false;
+            if (filterFieldId && filterFieldId === fieldId) {
+              filtered = filtered.filter(v => {
+                const text = v.name || v.value || v.id || '';
+                return String(text).toLowerCase().includes(filterKeyword);
+              });
+              isFiltered = true;
+            }
+            const total = field.allowedValues.length;
+            const maxValues = options.verbose || isFiltered ? filtered.length : 5;
+            const shown = filtered.slice(0, maxValues);
+            const values = shown.map(v => v.name || v.value || v.id).join(', ');
+            const remaining = filtered.length - maxValues;
+            const filterNote = isFiltered ? ` (${filtered.length}/${total} matched)` : '';
+            line += ` [${values}${remaining > 0 ? `, ... +${remaining} more` : ''}]${filterNote}`;
           }
           io.out(line);
         }
@@ -1005,7 +1034,7 @@ async function listTransitions(client, io, issueKey) {
     }
 
     io.out('');
-    io.info('Note: API reported required fields may be incomplete. Check your JIRA workflow configuration for the full list.');
+    io.info(`Fields marked with ${chalk.red('*')} are reported as required by the API. Your JIRA workflow may enforce additional required fields not listed here.`);
 
   } catch (err) {
     spinner.stop();
